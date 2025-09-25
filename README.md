@@ -1,4 +1,4 @@
-# Glitch Kids : Visual
+# Glitch Kids : Visualizer
 
 > **Disclaimer**:
 >
