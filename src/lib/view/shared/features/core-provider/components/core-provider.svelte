@@ -23,9 +23,10 @@
     createTimelineConstructor,
     createTimelineReadOnlyConstructor,
   } from "@core/timeline";
+  import { Exporter } from "@core/exporter";
   import { getContext, setContext } from "svelte";
 
-  const Timeline = createTimelineConstructor({ LayerAggregator });
+  const Timeline = createTimelineConstructor({ LayerAggregator, Exporter });
   const TimelineReadOnly = createTimelineReadOnlyConstructor({ Timeline });
 
   // Layer
@@ -87,6 +88,10 @@
   setContext("TimelineReadOnly", TimelineReadOnly.getInstance());
 
   const { children } = $props();
+
+  const exporter = Exporter.getInstance();
 </script>
 
-{@render children?.()}
+{#await exporter.load() then yes}
+  {@render children?.()}
+{/await}

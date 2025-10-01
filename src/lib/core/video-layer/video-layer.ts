@@ -54,18 +54,18 @@ export function createVideoLayerConstructor({
 
       const { time, state } = this.#timeline.getTimelineContext();
 
-      if (state === "stop") {
-        if (!this.#video.paused) this.#video.pause();
-        this.#video.currentTime = 0;
-      }
-      if (state === "pause") {
-        if (!this.#video.paused) this.#video.pause();
-      }
-      if (state === "playing") {
-        if (this.#video.paused) this.#video.play();
-      }
+      // if (state === "stop") {
+      //   if (!this.#video.paused) this.#video.pause();
+      //   this.#video.currentTime = 0;
+      // }
+      // if (state === "pause") {
+      //   if (!this.#video.paused) this.#video.pause();
+      // }
+      // if (state === "playing") {
+      //   if (this.#video.paused) this.#video.play();
+      // }
 
-      //   this.#video.currentTime = time % this.#video.duration;
+      this.#video.currentTime = time % this.#video.duration;
 
       context.drawImage(
         this.#video,

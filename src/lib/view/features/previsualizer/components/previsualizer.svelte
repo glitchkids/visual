@@ -80,6 +80,9 @@
     <button class="btn" onclick={() => timeline.play()}> play </button>
     <button class="btn" onclick={() => timeline.pause()}> pause </button>
     <button class="btn" onclick={() => timeline.stop()}> stop </button>
+    <button class="btn" onclick={() => timeline.exportAnimation()}>
+      Export
+    </button>
     <audio bind:this={audioEl}></audio>
     {timeline.getFrame()}
     <input

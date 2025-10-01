@@ -6,6 +6,8 @@ import {
 import type { Constructor } from "../types";
 import { LayerAggregator } from "@core/layer";
 import { on } from "svelte/events";
+import type { Exporter } from "@core/exporter";
+import { fetchFile } from "@ffmpeg/util";
 
 type TApplyAudioHandlerMixinDependencies = {
   LayerAggregator: typeof LayerAggregator;
@@ -49,7 +51,7 @@ function applyAudioHandlerMixin<T extends Constructor>(
       return this.#file ?? null;
     }
     getAudioTrack() {
-      return this.#audioElement.getTra;
+      // return this.#audioElement.getTra;
     }
 
     setAudioElement(audioElement: HTMLAudioElement) {
@@ -113,7 +115,7 @@ function createBaseCanvasContructor({
     }
 
     #setEvents() {
-      on(this.#canvas, "");
+      // on(this.#canvas, "");
     }
 
     setCanvas(canvas: HTMLCanvasElement) {
@@ -135,17 +137,29 @@ function createBaseCanvasContructor({
       }
       this.#layerAggregator.renderAll();
     }
-    getStream() {
-      return this.#canvas.captureStream(60);
+    hideCanvas() {
+      this.#canvas.style.display = "none";
+    }
+    showCanvas() {
+      this.#canvas.style.removeProperty("display");
+    }
+    async getBlob(): Promise<Blob | null> {
+      return new Promise((r) => {
+        this.#canvas.toBlob((blob) => {
+          r(blob);
+        });
+      });
     }
   };
 }
 
 type TCreateTimelineConstructorDependencies = {
   LayerAggregator: typeof LayerAggregator;
+  Exporter: typeof Exporter;
 };
 export function createTimelineConstructor({
   LayerAggregator,
+  Exporter,
 }: TCreateTimelineConstructorDependencies) {
   const BaseCanvas = createBaseCanvasContructor({ LayerAggregator });
   return class Timeline extends applyAudioHandlerMixin(
@@ -161,12 +175,19 @@ export function createTimelineConstructor({
     #frame = $state(0);
     #frameInterval = 1000 / 60;
 
-    #startTime = 0;
     #timeNow = 0;
     #timeThen = 0;
     #elapsedTime = 0;
 
-    #state: "playing" | "pause" | "stop" = "stop";
+    #timeRendering = 0;
+
+    #state: "playing" | "pause" | "stop" | "rendering" = "stop";
+
+    #exporter: Exporter;
+    constructor() {
+      super();
+      this.#exporter = Exporter.getInstance();
+    }
 
     #animate() {
       if (this.#state === "stop") return;
@@ -190,7 +211,6 @@ export function createTimelineConstructor({
       this.#state = "playing";
 
       this.#timeThen = performance.now();
-      this.#startTime = this.#timeThen;
 
       this.#animate();
       super.play();
@@ -212,7 +232,8 @@ export function createTimelineConstructor({
       return {
         state: this.#state,
         frame: this.#frame,
-        time: this.getTime(),
+        time:
+          this.#state === "rendering" ? this.#timeRendering : this.getTime(),
         duration: this.getDuration(),
       };
     }
@@ -220,20 +241,69 @@ export function createTimelineConstructor({
       return this.#frame;
     }
 
-    // renderAnimation() {
-    //   this.stop();
-    //   const stream = this.getStream();
-    //   // stream.addTrack();
-    //   this.play();
+    async exportAnimation() {
+      console.time();
+      let fps = 1 / 60;
+      this.#timeRendering = 0;
+      const images = [];
+      this.stop();
 
-    //   const recorder = new MediaRecorder(stream, {
-    //     mimeType: "video/mp4",
-    //   });
+      this.hideCanvas();
+      while (this.getDuration() > this.#timeRendering) {
+        this.#state = "rendering";
+        this.render();
+        const blob = await this.getBlob();
+        images.push(blob);
 
-    //   recorder.recorder.ondataavailable = (evt) => {
-    //     console.log(evt);
-    //   };
-    // }
+        this.#frame++;
+        this.#timeRendering = fps * this.#frame;
+        console.log(`${this.#timeRendering}/${this.getDuration()}`);
+      }
+      this.stop();
+      this.showCanvas();
+
+      const ffmpeg = this.#exporter.getFFmpeg();
+
+      // Write PNG blobs to virtual filesystem
+
+      ffmpeg.writeFile(this.getFileName(), await fetchFile(this.getFile()));
+
+      for (let i = 0; i < images.length; i++) {
+        ffmpeg.writeFile(`frame_${i}.png`, await fetchFile(images[i]));
+      }
+
+      // Run minimal FFmpeg command for MP4
+      await ffmpeg.exec([
+        "-framerate",
+        "60",
+        "-i",
+        "frame_%d.png",
+        "-i",
+        this.getFileName(),
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "output.mp4",
+      ]);
+
+      // Retrieve MP4 blob
+      const data = await ffmpeg.readFile("output.mp4");
+      const mp4Blob = new Blob([data], { type: "video/mp4" });
+
+      // Clean up
+      ffmpeg.deleteFile("output.mp4");
+      for (let i = 0; i < images.length; i++) {
+        ffmpeg.deleteFile(`frame_${i}.png`);
+      }
+
+      const download = document.createElement("a");
+      download.href = URL.createObjectURL(mp4Blob);
+      download.download = "output.mp4";
+      download.click();
+
+      console.timeEnd();
+    }
   };
 }
 
